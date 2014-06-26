@@ -28,63 +28,42 @@ df = df %.%
   select(-Name)
 
 # plots
-#pchar = 5:(5+length(unique(df$ExpDate)))
-#col <- lattice.theme$superpose.symbol$col
-xyplot(Close~Strike|Ticker,data=df,scales=list(relation="free"))
+xyplot(Close~Strike|Ticker,
+       data=df,
+       scales=list(relation="free"))
 xyplot(Close~Strike|Ticker+Option,data=df,
        scales=list(relation="free"),
        group=ExpDate,
        auto.key=list(columns=5))
 
-#trellis.par.set(theme = col.whitebg())
-#par.line <- trellis.par.get("superpose.line")
-#par.symb <- trellis.par.get("superpose.symbol")
-# n <- seq(length(unique(df$ExpDate)))
-# par.line 
-# par.symb <- n
-# col <- brewer.pal(length(n),"YlOrRd")
-
-# xyplot(Close~Strike|Ticker+Option,data=df,
-#        scales=list(relation="free"),
-#        group=ExpDate,
-#                key=list(text=list(as.character(unique(df$ExpDate))), 
-#                         space='top',
-#                         border=FALSE,
-#                         cex.title=1.2,
-#                         title="Expiration",
-#                         # size=7,
-#                         points=list(pch=par.symb$pch[n],
-#                                     col=par.line$col[n]
-#                                     #lty=par.line$lty[n],
-#                                     #type='b'),
-#                         ),
-#                         columns=5),
-#        pch=par.symb$pch[n],
-#        type='p')
-
-
 # just one ticker
+ticker = "SPY"
 xyplot(Close~Strike|ExpDate,
        data=df,
-       subset=Ticker=="SPY",
-       main="SPY Expiration",
+       subset=Ticker==ticker,
+       main=paste(ticker,"Expirations"),
        group=Option,
        auto.key=list(columns=2)
        )
 
 xyplot(OI~Strike|ExpDate,
        data=df,
-       subset=Ticker=="SPY",
-       main="SPY Open Interest by Expiration",
+       subset=Ticker==ticker,
+       main=paste(ticker,"Open Interest by Expiration"),
        group=Option,
-       auto.key=list(columns=2)
+       ylab="Open Interest",
+       auto.key=list(columns=2),
+       panel=function(x,...){
+         panel.xyplot(x,...)
+         panel.grid(-1,-1)
+       }
 )
 
-# just SPY
-dfspy = filter(df,Ticker=="SPY")
+# extract prices
+dfp = filter(df,Ticker==ticker)
 
 # find the available strikes by expiration date
-strikes = dfspy %.% group_by(ExpDate) %.% summarise(paste(unique(Strike),collapse=' '))
+strikes = dfp %.% group_by(ExpDate) %.% summarise(paste(unique(Strike),collapse=' '))
 
 # build a data frame of collar prices
 collars = NULL
@@ -93,15 +72,14 @@ apply(strikes,1,function(d){
   slist = strsplit(as.character(d[2]),' ')
   sapply(slist[[1]],function(sc){
     s = as.numeric(sc)
-    dfspyc = filter(dfspy,ExpDate==expiration,Option=='Call',Strike==s)
-    dfspyp = filter(dfspy,ExpDate==expiration,Option=='Put',Strike==s)
+    dfpc = filter(dfp,ExpDate==expiration,Option=='Call',Strike==s)
+    dfpp = filter(dfp,ExpDate==expiration,Option=='Put',Strike==s)
     
     price = NA
-    if ( nrow(dfspyc) == nrow(dfspyp)) {
-      price = dfspyp$Close - dfspyc$Close
+    if ( nrow(dfpc) == nrow(dfpp)) {
+      price = dfpp$Close - dfpc$Close
     }
     
-    print(paste("binding",expiration,s,price))
     collars <<- rbind(collars,
                     data.frame(ExpDate=as.Date(expiration),
                                Strike=s, 
@@ -116,12 +94,44 @@ apply(strikes,1,function(d){
 # plot a particular strike
 atm = 195
 
-xyplot(Price~ExpDate,data=collars,group=Strike,auto.key=FALSE,main="SPY Collar Prices")
+xyplot(Price~ExpDate,
+       data=collars,
+       group=Strike,
+       auto.key=FALSE,
+       main=paste(ticker,"Collar Prices"),
+       xlab="Expiration Date",
+       ylab="Price ($)",
+       panel=function(x,...){
+         panel.xyplot(x,...)
+         panel.grid(-1,-1,...)
+       }
+       )
 
-xyplot(Price~ExpDate,data=collars,subset=Strike==atm,auto.key=FALSE,
-       main=paste("SPY Collar Prices: ATM",atm),
+bwplot(~Price|ExpDate,
+          data=collars,
+          auto.key=FALSE,
+          main=paste(ticker,"Collar Prices"),
+          xlab="Price ($)"
+)
+
+stripplot(~Price|ExpDate,
+       data=collars,
+       group=Strike,
+       auto.key=FALSE,
+       main=paste(ticker,"Collar Prices"),
+       xlab="Price ($)"
+)
+
+xyplot(Price~ExpDate,
+       data=collars,
+       subset=Strike==atm,
+       auto.key=FALSE,
+       main=paste(ticker,"Collar Prices: ATM",atm),
+       xlab="Expiration Date",
+       ylab="Price ($)",
        panel=function(x,y,...){
          panel.xyplot(x,y,...)
+         panel.grid(-1,-1,...)
          panel.rug(x,y,...)
        })
 
